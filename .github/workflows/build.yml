@@ -43,7 +43,7 @@ on:
         description: "Kernel-Source: Kernel repo's org/user on github"
         required: true
         type: choice
-        default: LineageOS
+        default: crdroidandroid
         options:
           - Manual-Type
           - LineageOS
@@ -80,7 +80,7 @@ on:
         description: "Kernel-Branch: such as lineage-23.2 sixteen-qpr1 etc."
         required: true
         type: string
-        default: "lineage-23.2"
+        default: "16.0"
         
       kernel_configs:
         description: "Kernel-Configs: Select ur kernel configs(Use Manual-Type to custom it)"
@@ -108,7 +108,7 @@ on:
         description: "KSU: KernelSU Version"
         required: true
         type: choice
-        default: None
+        default: KernelSU-Next
         options:
           - None
           - Official-KernelSU
