@@ -207,9 +207,12 @@ jobs:
   Kernel_CI:
     env:
         GH_TOKEN: ${{ github.token }}
+        ASTONC_KERNEL_SHA: 74d183918ec84f7248f3bb85a9953fe39b661573
+        ASTONC_MODULES_SHA: 278e26271015598f27934b1f2e5a586828d07993
+        ASTONC_KSU_SHA: 8f902aeb16033024143ae36cf711df902cf02fae
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       actions: read
       checks: read
     steps:
@@ -285,10 +288,16 @@ jobs:
           fi
 
           git clone --depth=1 -b ${{ inputs.kernel_branch }} https://github.com/${source}/${{ inputs.kernel_source_format }}_${brand}_${{ inputs.soc }}.git ${{ inputs.soc }} || exit 1
+          git -C "${{ inputs.soc }}" fetch --depth=1 origin "$ASTONC_KERNEL_SHA" || exit 1
+          git -C "${{ inputs.soc }}" checkout --detach "$ASTONC_KERNEL_SHA" || exit 1
+          test "$(git -C "${{ inputs.soc }}" rev-parse HEAD)" = "$ASTONC_KERNEL_SHA" || exit 1
 
           if [[ "${{ inputs.has_modules_repo }}" == "true" ]]; then
 
             git clone --depth=1 -b ${{ inputs.kernel_branch }} https://github.com/${source}/${{ inputs.kernel_source_format }}_${brand}_${{ inputs.soc }}-modules.git ${{ inputs.soc }}-modules || exit 1
+            git -C "${{ inputs.soc }}-modules" fetch --depth=1 origin "$ASTONC_MODULES_SHA" || exit 1
+            git -C "${{ inputs.soc }}-modules" checkout --detach "$ASTONC_MODULES_SHA" || exit 1
+            test "$(git -C "${{ inputs.soc }}-modules" rev-parse HEAD)" = "$ASTONC_MODULES_SHA" || exit 1
 
           fi
 
@@ -352,7 +361,11 @@ jobs:
               ;;
 
             "KernelSU-Next")
-              curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/refs/heads/dev/kernel/setup.sh" | bash -s dev || exit 1
+              curl -fLSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/$ASTONC_KSU_SHA/kernel/setup.sh" -o /tmp/astonc-ksu-setup.sh || exit 1
+              bash /tmp/astonc-ksu-setup.sh "$ASTONC_KSU_SHA" || exit 1
+              test "$(git -C KernelSU-Next rev-parse HEAD)" = "$ASTONC_KSU_SHA" || exit 1
+              test "$(expr 30000 + "$(git -C KernelSU-Next rev-list --count HEAD)")" = 33333 || exit 1
+              grep -Eq 'KERNEL_SU_UAPI_VERSION = 5;' KernelSU-Next/uapi/supercall.h || exit 1
               ;;
 
             "KernelSU-Next-with-susfs")
@@ -653,9 +666,33 @@ jobs:
           sed -i "s|ksu_supported=false|ksu_supported=true|" anykernel.sh
           zip -r9 ../"${ZIP_NAME}.zip" * -x .git
 
-      - name: Create GitHub Release
+      - name: Record source identities and output hashes
         run: |
-          REL_NAME="${{ inputs.soc }}_${{ inputs.kernel_source }}-${{ inputs.kernel_branch }}_${{ inputs.ksu_type }}_$(date -u +"%Y%m%d_%H%M")"
-          cd ${GITHUB_WORKSPACE} || exit 1
-          ZIP_FILE=$(ls *.zip)
-          gh release create "$REL_NAME" --title "$REL_NAME" --notes "$(cat options.txt)" "${ZIP_FILE}" Image build.log options.txt .config
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          def head(path):
+              return subprocess.check_output(['git', '-C', path, 'rev-parse', 'HEAD'], text=True).strip()
+          outputs = {}
+          for path in [pathlib.Path('Image'), pathlib.Path('.config'), pathlib.Path('build.log'), pathlib.Path('options.txt'), *pathlib.Path('.').glob('*.zip')]:
+              outputs[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
+          record = {'workflow_sha': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'],
+                    'kernel_sha': head('sm8550'), 'modules_sha': head('sm8550-modules'),
+                    'kernelsu_sha': head('sm8550/KernelSU-Next'), 'anykernel_sha': head('AnyKernel3'),
+                    'driver_version': 33333, 'uapi': 5, 'outputs_sha256': outputs,
+                    'provenance_limit': 'CI-recorded source identities; toolchain archive and runner environment are not independently attested'}
+          pathlib.Path('build-provenance.json').write_text(json.dumps(record, indent=2) + '\n')
+          PY
+
+      - name: Retain review artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: astonc-33333-uapi5-${{ github.run_id }}
+          retention-days: 30
+          include-hidden-files: true
+          path: |
+            Image
+            .config
+            build.log
+            options.txt
+            *.zip
+            build-provenance.json
