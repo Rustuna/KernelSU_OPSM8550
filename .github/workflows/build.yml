@@ -30,7 +30,7 @@ on:
         description: "Clang-Version: Select the clang version of ur kernel"
         required: true
         type: choice
-        default: clang-r563880c
+        default: clang-r596125
         options:
           - clang-r416183b1 #lineage-19.1 in android12-qpr3-release
           - clang-r450784d  #lineage-20.0 in android13-qpr3-release
@@ -38,6 +38,7 @@ on:
           - clang-r536225   #lineage-22.2 in android15-qpr2-release
           - clang-r547379   #lineage-23.0 in android16-qpr3-release
           - clang-r563880c  #lineage-23.2 in android16-qpr3-release
+          - clang-r596125   #astonc Android 17, build 15071444
           
       kernel_source:
         description: "Kernel-Source: Kernel repo's org/user on github"
@@ -325,6 +326,10 @@ jobs:
             curl -LO https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android16-qpr2-release/clang-r547379.tar.gz || exit 1
             ;;
 
+            "clang-r596125")
+            curl -fLO https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/29182889399818f97baa65ea238c80e8117981eb/clang-r596125.tar.gz || exit 1
+            ;;
+
             "clang-r563880c")
             curl -LO https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android16-qpr2-release/clang-r563880c.tar.gz || exit 1
             ;;
@@ -494,7 +499,7 @@ jobs:
 
           fi
 
-          touch ./.scmversion
+          printf '%s\n' '-g7ec40be85325' > ./.scmversion
 
       - name: Make Kernel Configs
         run: |
